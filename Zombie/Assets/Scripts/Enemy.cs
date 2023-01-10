@@ -1,9 +1,11 @@
 ﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.AI; // AI, 내비게이션 시스템 관련 코드를 가져오기
+using Photon.Pun;
 
 // 적 AI를 구현한다
-public class Enemy : LivingEntity {
+public class Enemy : LivingEntity
+{
     public LayerMask whatIsTarget; // 추적 대상 레이어
 
     private LivingEntity targetEntity; // 추적할 대상
@@ -37,7 +39,8 @@ public class Enemy : LivingEntity {
         }
     }
 
-    private void Awake() {
+    private void Awake()
+    {
         // 초기화
         // 게임 오브젝트로부터 사용할 컴포넌트 가져오기
         pathFinder = GetComponent<NavMeshAgent>();
@@ -50,7 +53,9 @@ public class Enemy : LivingEntity {
     }
 
     // 적 AI의 초기 스펙을 결정하는 셋업 메서드
-    public void Setup(float newHealth, float newDamage, float newSpeed, Color skinColor) {
+    [PunRPC]
+    public void Setup(float newHealth, float newDamage, float newSpeed, Color skinColor)
+    {
         // 체력 설정
         startingHealth = newHealth;
         health = newHealth;
@@ -62,18 +67,29 @@ public class Enemy : LivingEntity {
         enemyRenderer.material.color = skinColor;
     }
 
-    private void Start() {
+    private void Start()
+    {
+        if(!PhotonNetwork.IsMasterClient)
+        {
+            return;
+        }
         // 게임 오브젝트 활성화와 동시에 AI의 추적 루틴 시작
         StartCoroutine(UpdatePath());
     }
 
-    private void Update() {
+    private void Update()
+    {
+        if(!PhotonNetwork.IsMasterClient)
+        {
+            return;
+        }
         // 추적 대상의 존재 여부에 따라 다른 애니메이션을 재생
         enemyAnimator.SetBool("HasTarget", hasTarget);
     }
 
     // 주기적으로 추적할 대상의 위치를 찾아 경로를 갱신
-    private IEnumerator UpdatePath() {
+    private IEnumerator UpdatePath()
+    {
         // 살아있는 동안 무한 루프
         while (!dead)
         {
@@ -116,7 +132,9 @@ public class Enemy : LivingEntity {
     }
 
     // 데미지를 입었을때 실행할 처리
-    public override void OnDamage(float damage, Vector3 hitPoint, Vector3 hitNormal) {
+    [PunRPC]
+    public override void OnDamage(float damage, Vector3 hitPoint, Vector3 hitNormal)
+    {
         // 아직 사망하지 않은 경우에만 피격 효과 재생
         if (!dead)
         {
@@ -134,7 +152,8 @@ public class Enemy : LivingEntity {
     }
 
     // 사망 처리
-    public override void Die() {
+    public override void Die()
+    {
         // LivingEntity의 Die()를 실행하여 기본 사망 처리 실행
         base.Die();
 
@@ -155,7 +174,12 @@ public class Enemy : LivingEntity {
         enemyAudioPlayer.PlayOneShot(deathSound);
     }
 
-    private void OnTriggerStay(Collider other) {
+    private void OnTriggerStay(Collider other)
+    {
+        if(!PhotonNetwork.IsMasterClient)
+        {
+            return;
+        }
         // 자신이 사망하지 않았다면
         // 트리거 충돌한 상대방 게임 오브젝트가 추적 대상이라면 공격 실행   
         if (!dead && Time.time >= lastAttackTime + timeBetAttack)

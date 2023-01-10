@@ -1,10 +1,13 @@
 ﻿using System.Collections;
 using UnityEngine;
+using Photon.Pun;
 
 // 총을 구현한다
-public class Gun : MonoBehaviour {
+public class Gun : MonoBehaviourPun
+{
     // 총의 상태를 표현하는데 사용할 타입을 선언한다
-    public enum State {
+    public enum State
+    {
         Ready, // 발사 준비됨
         Empty, // 탄창이 빔
         Reloading // 재장전 중
@@ -35,8 +38,32 @@ public class Gun : MonoBehaviour {
     public float reloadTime = 1.8f; // 재장전 소요 시간
     private float lastFireTime; // 총을 마지막으로 발사한 시점
 
+    public void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
+    {
+        if (stream.IsWriting)
+        {
+            stream.SendNext(ammoRemain);
+            stream.SendNext(magAmmo);
+            stream.SendNext(state);
+        }
+        else
+        {
+            ammoRemain = (int)stream.ReceiveNext();
 
-    private void Awake() {
+            magAmmo = (int)stream.ReceiveNext();
+
+            state = (State)stream.ReceiveNext();
+        }
+    }
+
+    [PunRPC]
+    public void AddAmmo(int ammo)
+    {
+        ammoRemain += ammo;
+    }
+
+    private void Awake()
+    {
         // 사용할 컴포넌트들의 참조를 가져오기
         gunAudioPlayer = GetComponent<AudioSource>();
         bulletLineRenderer = GetComponent<LineRenderer>();
@@ -47,7 +74,8 @@ public class Gun : MonoBehaviour {
         bulletLineRenderer.enabled = false;
     }
 
-    private void OnEnable() {
+    private void OnEnable()
+    {
 
         // 총 상태 초기화
         // 현재 탄창을 가득 채우기
@@ -59,7 +87,8 @@ public class Gun : MonoBehaviour {
     }
 
     // 발사 시도
-    public void Fire() {
+    public void Fire()
+    {
         // 현재 상태가 발사 가능한 상태
         // && 마지막 총 발사 시점에서 timeBetFire 이상의 시간이 지남
         if (state == State.Ready && Time.time >= lastFireTime + timeBetFire)
@@ -71,8 +100,39 @@ public class Gun : MonoBehaviour {
         }
     }
 
+    [PunRPC]
+    private void ShotProcessOnServer()
+    {
+        RaycastHit hit;
+
+        Vector3 hitPosition = Vector3.zero;
+
+        if(Physics.Raycast(fireTransform.position,fireTransform.forward, out hit, fireDistance))
+        {
+            IDamageable target = hit.collider.GetComponent<IDamageable>();
+
+            if(target != null)
+                target.OnDamage(damage,hit.point,hit.normal);
+
+            hitPosition = hit.point;
+        }
+        else
+        {
+            hitPosition = fireTransform.position + fireTransform.forward * fireDistance;
+        }
+
+        photonView.RPC("ShotEffectProcessOnClients", RpcTarget.All, hitPosition);
+    }
+
+    [PunRPC]
+    private void ShotEffectProcessOnClients(Vector3 hitPostion)
+    {
+        StartCoroutine(ShotEffect(hitPostion));
+    }
+
     // 실제 발사 처리
-    private void Shot() {
+    private void Shot()
+    {
         // 레이캐스트에 의한 충돌 정보를 저장하는 컨테이너
         RaycastHit hit;
         // 탄알이 맞은 곳을 저장할 변수
@@ -108,7 +168,7 @@ public class Gun : MonoBehaviour {
 
         // 남은 탄알 수를 -1
         magAmmo--;
-        if(magAmmo <= 0)
+        if (magAmmo <= 0)
         {
             // 탄알에 남은 탄알이 있다면 총의 현재 상태를 Empty로 갱신
             state = State.Empty;
@@ -116,7 +176,8 @@ public class Gun : MonoBehaviour {
     }
 
     // 발사 이펙트와 소리를 재생하고 총알 궤적을 그린다
-    private IEnumerator ShotEffect(Vector3 hitPosition) {
+    private IEnumerator ShotEffect(Vector3 hitPosition)
+    {
         // 총구 화염 효과 재생
         muzzleFlashEffect.Play();
         // 탄막 배출 효과 재생
@@ -140,7 +201,8 @@ public class Gun : MonoBehaviour {
     }
 
     // 재장전 시도
-    public bool Reload() {
+    public bool Reload()
+    {
         // ammoRemain <= 0 : 재장전에 사용할 남은 탄알이 없음
         // magAmmo >= magCapacity : 탄창에 탄알이 이미 가득 차 있음
         if (state == State.Reloading || ammoRemain <= 0 || magAmmo >= magCapacity)
@@ -154,7 +216,8 @@ public class Gun : MonoBehaviour {
     }
 
     // 실제 재장전 처리를 진행
-    private IEnumerator ReloadRoutine() {
+    private IEnumerator ReloadRoutine()
+    {
         // 현재 상태를 재장전 중 상태로 전환
         state = State.Reloading;
         // 재장전 소리 재생
